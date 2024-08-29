@@ -1,64 +1,85 @@
-using System;
-using Oculus.Platform.Models;
-using Unity.VisualScripting;
-using UnityEngine;
+ using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
+using System.Linq;
 
-public class WebcamInput : MonoBehaviour
+public class WebCamInput : MonoBehaviour
 {
-    #region Editable attributes
 
-    [SerializeField] string _deviceName = "";
     [SerializeField] RawImage rawImage;
 
-    [SerializeField] private TMPro.TMP_InputField cameraName;
-    [SerializeField] private Button startCam;
+    public TMP_Dropdown webcamDropdown; // Reference to the Dropdown UI element
+    private WebCamTexture _webcam;
+    private RenderTexture _buffer;
 
-    #endregion
-
-    #region Internal objects
-
-    WebCamTexture _webcam;
-    RenderTexture _buffer;
-
-    #endregion
-
-    #region Public properties
-
-    public Texture Texture => _buffer;
-
-    #endregion
-
-    #region MonoBehaviour implementation
-
-    void Start()
+    private void Start()
     {
-        cameraName.onValueChanged.AddListener(OnCameraNameSubmit);
-        startCam.onClick.AddListener(OnStartCam);
+        PopulateDropdown();
+        webcamDropdown.onValueChanged.AddListener(OnDropdownValueChanged);
     }
 
-    private void OnStartCam()
+    private void PopulateDropdown()
     {
-        _webcam = null;
-        _buffer = null;
+        webcamDropdown.ClearOptions();
+
+        WebCamDevice[] devices = WebCamTexture.devices;
+        var options = devices.Select(device => device.name).ToList();
+
+        // Add the "Select Webcam" option at the start
+        options.Insert(0, "Select Webcam");
+
+        webcamDropdown.AddOptions(options);
+        webcamDropdown.value = 0;
+        webcamDropdown.RefreshShownValue();
+    }
+
+    private void OnDropdownValueChanged(int index)
+    {
+        // Check if "Select Webcam" is selected
+        if (index == 0)
+        {
+            // Optionally, you can stop any running webcam here
+            if (_webcam != null && _webcam.isPlaying)
+            {
+                _webcam.Stop();
+                _webcam = null;
+                _buffer = null;
+            }
+            Debug.Log("Select Webcam option chosen. No webcam started.");
+            return;
+        }
+
+        WebCamDevice[] devices = WebCamTexture.devices;
+        if (devices.Length > 0 && index <= devices.Length)
+        {
+            string selectedDeviceName = devices[index - 1].name; // Adjust for the "Select Webcam" option
+            StartWebcam(selectedDeviceName);
+        }
+    }
+
+    private void StartWebcam(string deviceName)
+    {
+        if (_webcam != null && _webcam.isPlaying)
+        {
+            _webcam.Stop();
+            _webcam = null;
+            _buffer = null;
+        }
 
         try
         {
-            _webcam = new WebCamTexture(_deviceName);
+            _webcam = new WebCamTexture(deviceName);
             _buffer = new RenderTexture(1920, 1080, 0);
             _webcam.Play();
+            Debug.Log($"Started webcam: {deviceName}");
         }
-        catch (Exception ex)
+        catch (System.Exception ex)
         {
             Debug.LogWarning(ex.Message);
         }
     }
-    private void OnCameraNameSubmit(string cameraName)
-    {
-        _deviceName = cameraName;
-    }
 
-    void OnDestroy()
+        void OnDestroy()
     {
         Destroy(_webcam);
         Destroy(_buffer);
@@ -73,10 +94,6 @@ public class WebcamInput : MonoBehaviour
         var offset = new Vector2(0, vflip ? 1 : 0);
         Graphics.Blit(_webcam, _buffer, scale, offset);
 
-        rawImage.texture = Texture;
+        rawImage.texture = _buffer;
     }
-
-
-
-    #endregion
 }
